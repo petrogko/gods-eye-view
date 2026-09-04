@@ -1,0 +1,46 @@
+# Caddy fronts the Node preview server inside the container.
+#
+# - Basic auth on everything except /healthz. The platform (App Runner) needs an
+#   unauthenticated probe, and that probe reaches the real app through the
+#   proxy so a dead Node process fails the check instead of hiding behind a
+#   healthy Caddy.
+# - TLS is terminated by the platform; this listener is plain HTTP on the
+#   container port. No site name, so Caddy never attempts certificate issuance.
+# - Credentials arrive as env vars: BASIC_AUTH_USER and BASIC_AUTH_HASH (a
+#   bcrypt hash — generate with `caddy hash-password`). Both are injected as
+#   runtime secrets, never baked into the image.
+
+{
+	admin off
+	auto_https off
+}
+
+:{$PUBLIC_PORT:8080} {
+	encode gzip zstd
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Content-Security-Policy "frame-ancestors 'none'"
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# Unauthenticated liveness probe that exercises the app itself.
+	handle /healthz {
+		rewrite * /
+		reverse_proxy 127.0.0.1:{$PORT:4173}
+	}
+
+	handle {
+		basic_auth {
+			{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+		}
+		reverse_proxy 127.0.0.1:{$PORT:4173} {
+			# Long-lived: the voice session and AIS polling hold connections open.
+			transport http {
+				read_timeout 120s
+			}
+		}
+	}
+}

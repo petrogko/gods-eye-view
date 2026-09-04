@@ -7772,6 +7772,30 @@ export default defineConfig(({ mode }) => {
   const allowedHosts = (env.HOST === '0.0.0.0' || env.HOST === '::')
     ? true
     : localAllowedHosts;
+  // Framing protection belongs on the APP DOCUMENT, not on API responses:
+  // a browser evaluates frame-ancestors against the framed page's own
+  // navigation response. Without this, a hostile page could frame
+  // `/?setup=1`, align a lure over Provider Settings, and have the framed
+  // app issue a perfectly same-origin credential write that passes every
+  // Host/Origin check. Shared by `server` and `preview` so a hosted build is
+  // never quietly less protected than a local one.
+  const securityHeaders = {
+    'X-Frame-Options': 'DENY',
+    'Content-Security-Policy': "frame-ancestors 'none'",
+  };
+  // `vite preview` runs only a plugin's configurePreviewServer hook. Ten of
+  // the proxies registered nothing there, so a production build served by
+  // preview had no flights, satellites, roads, CCTV, fires, traffic, terrain,
+  // or bike share. Their configureServer bodies touch only `server.middlewares`,
+  // which preview provides, so one hook serves both. Applied PER PLUGIN, never
+  // blanket: vite-plugin-cesium has a dev-only configureServer of its own, and
+  // keySetupEndpoint calls server.restart(), which preview does not have.
+  const withPreviewParity = (plugin) => {
+    if (plugin.configureServer && !plugin.configurePreviewServer) {
+      plugin.configurePreviewServer = plugin.configureServer;
+    }
+    return plugin;
+  };
   return {
     plugins: [
       // FIRST, and `enforce: 'pre'`: vite installs its own host check only
@@ -7779,21 +7803,21 @@ export default defineConfig(({ mode }) => {
       // otherwise answer before any Host validation. See src/apiHostGuard.mjs.
       apiHostGuardPlugin({ allowedHosts }),
       cesium(),
-      openSkyProxy(),
-      celestrakProxy(),
-      tomtomProxy(),
-      firmsProxy(),
+      withPreviewParity(openSkyProxy()),
+      withPreviewParity(celestrakProxy()),
+      withPreviewParity(tomtomProxy()),
+      withPreviewParity(firmsProxy()),
       rocketLaunchesProxy(),
-      terrainHeightsProxy(),
-      adsbdbProxy(),
-      overpassProxy(),
+      withPreviewParity(terrainHeightsProxy()),
+      withPreviewParity(adsbdbProxy()),
+      withPreviewParity(overpassProxy()),
       militaryInstallationsProxy(),
       regionalBriefProxy(),
       weatherEffectsProxy(),
-      cctvProxy(),
+      withPreviewParity(cctvProxy()),
       radioBrowserProxy(),
-      gbfsProxy(),
-      adsbLolProxy(),
+      withPreviewParity(gbfsProxy()),
+      withPreviewParity(adsbLolProxy()),
       aisLiveProxy(),
       trackBackfillProxies(),
       openAiRealtimeProxy(),
@@ -7808,17 +7832,16 @@ export default defineConfig(({ mode }) => {
         // Pinokio keeps optional credentials in this ignored local file.
         deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/ENVIRONMENT'],
       },
-      // Framing protection belongs on the APP DOCUMENT, not on API responses:
-      // a browser evaluates frame-ancestors against the framed page's own
-      // navigation response. Without this, a hostile page could frame
-      // `/?setup=1`, align a lure over Provider Settings, and have the framed
-      // app issue a perfectly same-origin credential write that passes every
-      // Host/Origin check. These headers apply to everything this dev server
-      // serves, which is what makes that attack impossible rather than unlikely.
-      headers: {
-        'X-Frame-Options': 'DENY',
-        'Content-Security-Policy': "frame-ancestors 'none'",
-      },
+      headers: securityHeaders,
+    },
+    // `vite preview` is the production surface (see Dockerfile): it serves
+    // dist/ and, via withPreviewParity above, the same /api proxy layer as the
+    // dev server. Mirror the bindings and the document headers.
+    preview: {
+      host: env.HOST || 'localhost',
+      port: parseInt(env.PORT, 10) || 4173,
+      allowedHosts,
+      headers: securityHeaders,
     },
     // Expose selected API keys to the browser via import.meta.env.*
     define: {

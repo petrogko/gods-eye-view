@@ -90,7 +90,7 @@ test('vite.config.js installs the guard before any proxy plugin', () => {
   // A new proxy added above the guard would silently reopen the hole.
   const source = readFileSync(fileURLToPath(new URL('../vite.config.js', import.meta.url)), 'utf8');
   const guardAt = source.indexOf('apiHostGuardPlugin({ allowedHosts })');
-  const firstProxyAt = source.indexOf('Proxy(),', source.indexOf('plugins: ['));
+  const firstProxyAt = source.indexOf('Proxy()', source.indexOf('plugins: ['));
   assert.ok(guardAt > 0, 'the guard must be registered in the plugins array');
   assert.ok(guardAt < firstProxyAt, 'the guard must come before the first proxy plugin');
   // And the same allowedHosts value must feed vite's own check.

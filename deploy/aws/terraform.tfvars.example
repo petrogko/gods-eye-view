@@ -1,0 +1,25 @@
+# Copy to terraform.tfvars (gitignored) and fill in. Everything here except
+# region/app_name is a secret or protects one.
+
+region   = "us-east-1"
+app_name = "gods-eye-view"
+
+# Who may open the site. Hash with:
+#   docker run --rm caddy:2 caddy hash-password --plaintext 'your-password'
+basic_auth_user = "me"
+basic_auth_hash = "$2a$14$..."
+
+# Optional server-side provider keys, by the env var the app reads. Leave the
+# map empty for a keyless instance (satellite basemap, earthquakes, launches,
+# radio, CCTV all work without any key).
+provider_secrets = {
+  # OPENAI_API_KEY               = "sk-..."
+  # AISSTREAM_API_KEY            = "..."
+  # OPENSKY_CLIENT_ID            = "..."
+  # OPENSKY_CLIENT_SECRET        = "..."
+  # FIRMS_MAP_KEY                = "..."
+  # TOMTOM_API_KEY               = "..."
+  # LL2_API_TOKEN                = "..."
+  # GEV_RATELIMIT_OPENAI_PER_MIN = "30"
+  # GEV_RATELIMIT_GOOGLE_PER_MIN = "120"
+}

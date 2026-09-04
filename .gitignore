@@ -23,3 +23,10 @@ pinokio/.installed
 # renames). A crash between open and rename strands one holding every key.
 ..env.*.tmp
 pinokio/.ENVIRONMENT.*.tmp
+# Deployment state and the tfvars that carry real secrets.
+deploy/aws/.terraform/
+deploy/aws/.terraform.lock.hcl
+deploy/aws/*.tfstate
+deploy/aws/*.tfstate.*
+deploy/aws/terraform.tfvars
+deploy/aws/*.auto.tfvars
