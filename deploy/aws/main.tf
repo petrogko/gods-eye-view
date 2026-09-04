@@ -154,7 +154,7 @@ resource "aws_apprunner_service" "app" {
 
         runtime_environment_variables = {
           NODE_ENV    = "production"
-          HOST        = "0.0.0.0"
+          HOST        = "127.0.0.1" # Node on loopback; Caddy owns the public port
           PORT        = "4173"
           PUBLIC_PORT = "8080"
         }

@@ -7,10 +7,10 @@ set -eu
 : "${BASIC_AUTH_HASH:?BASIC_AUTH_HASH is required (bcrypt, from 'caddy hash-password')}"
 
 # The preview server is the production surface: it serves dist/ and carries
-# the full /api proxy layer. It binds inside the container only; Caddy is the
-# sole public listener.
+# the full /api proxy layer. It binds to loopback only; Caddy is the sole
+# listener on the container interface.
 node ./node_modules/vite/bin/vite.js preview \
-  --host "${HOST:-0.0.0.0}" \
+  --host "${HOST:-127.0.0.1}" \
   --port "${PORT:-4173}" \
   --strictPort &
 NODE_PID=$!

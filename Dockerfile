@@ -40,10 +40,11 @@ RUN chmod +x /usr/local/bin/entrypoint.sh \
  && chown -R node:node /app/.gev-cache /app/.gev-logs /var/lib/caddy
 USER node
 ENV NODE_ENV=production \
-    # Bind all interfaces INSIDE the container only; Caddy is the sole public
-    # listener. This also sets allowedHosts:true, which is correct here: the
-    # platform gives us a real hostname and Caddy's auth is the gate.
-    HOST=0.0.0.0 \
+    # Node listens on loopback ONLY; Caddy is the sole listener on the container
+    # interface and rewrites the upstream Host to `localhost`. That keeps vite's
+    # restricted allowedHosts and the /api host guard active inside the
+    # container instead of disabling both the way HOST=0.0.0.0 would.
+    HOST=127.0.0.1 \
     PORT=4173 \
     PUBLIC_PORT=8080 \
     XDG_DATA_HOME=/var/lib/caddy \

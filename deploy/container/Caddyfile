@@ -9,7 +9,6 @@
 # - Credentials arrive as env vars: BASIC_AUTH_USER and BASIC_AUTH_HASH (a
 #   bcrypt hash — generate with `caddy hash-password`). Both are injected as
 #   runtime secrets, never baked into the image.
-
 {
 	admin off
 	auto_https off
@@ -29,7 +28,9 @@
 	# Unauthenticated liveness probe that exercises the app itself.
 	handle /healthz {
 		rewrite * /
-		reverse_proxy 127.0.0.1:{$PORT:4173}
+		reverse_proxy 127.0.0.1:{$PORT:4173} {
+			header_up Host localhost
+		}
 	}
 
 	handle {
@@ -37,6 +38,9 @@
 			{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
 		}
 		reverse_proxy 127.0.0.1:{$PORT:4173} {
+			# Node sees `localhost`, never the public hostname: vite's restricted
+			# allowedHosts and the /api host guard stay enforced in the container.
+			header_up Host localhost
 			# Long-lived: the voice session and AIS polling hold connections open.
 			transport http {
 				read_timeout 120s
