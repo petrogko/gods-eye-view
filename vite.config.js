@@ -67,6 +67,7 @@ import {
   validateKeySetupUpdates,
 } from './src/keySetupCore.mjs';
 import { hardenCredentialFile } from './src/keySetupHardening.mjs';
+import { apiHostGuardPlugin } from './src/apiHostGuard.mjs';
 import {
   fetchTerrainChunkWithRetry,
   parseTerrainPoints,
@@ -648,6 +649,17 @@ function sanitizeOverpassBody(rawBody) {
     if (Math.abs(n - s) > OVERPASS_MAX_BBOX_DEG || Math.abs(e - w) > OVERPASS_MAX_BBOX_DEG) {
       return { ok: false, error: 'Overpass bbox too large' };
     }
+  }
+
+  // The `[out:…]` settings statement is skipped by the per-statement bound loop
+  // below (it declares no selector), so validate it HERE — it decides what the
+  // mirror answers with. `[out:custom]` and `[out:popup]` return a full HTML
+  // document containing inline script and third-party <script src> tags; served
+  // from this origin that is arbitrary JS next to the key broker. Every query
+  // this app issues is `[out:json]`, so requiring it costs nothing real.
+  const outFormats = [...stripped.matchAll(/\[\s*out\s*:\s*([a-z]+)/gi)].map((m) => m[1].toLowerCase());
+  if (outFormats.length !== 1 || outFormats[0] !== 'json') {
+    return { ok: false, error: 'Overpass output format must be json' };
   }
 
   // Reject control-flow constructs the app never uses — their set/bound semantics
@@ -2544,11 +2556,23 @@ function trimOverpassCache() {
  *
  * @param {import('http').ServerResponse} res - Node HTTP response.
  * @param {{status:number,body:string,contentType:string,endpoint:string}} payload
+ *   `contentType` is retained as cache diagnostics ONLY — it is upstream-chosen
+ *   and must never reach a response header. See the note in the body.
  * @param {string} [cacheStatus='MISS'] - 'HIT', 'MISS', or 'INFLIGHT'.
  */
 function sendOverpassResponse(res, payload, cacheStatus = 'MISS') {
+  // NEVER reflect the upstream Content-Type. A mirror picks it, and this route
+  // takes an unauthenticated cross-origin form POST — a simple request, so no
+  // preflight and no Origin check ever applies. Reflecting `text/html` renders
+  // an upstream-chosen document, script included, at THIS origin: the one that
+  // holds the key broker. Real data is always JSON (the sanitizer now admits
+  // only `[out:json]`); everything else is a refusal whose body is still worth
+  // reading, so it is kept but served as inert text. `nosniff` stops the
+  // browser from recovering a renderable type on its own.
+  const isData = overpassPayloadIsData(payload);
   res.writeHead(payload.status, {
-    'Content-Type': payload.contentType || 'application/json',
+    'Content-Type': isData ? 'application/json; charset=utf-8' : 'text/plain; charset=utf-8',
+    'X-Content-Type-Options': 'nosniff',
     'Cache-Control': 'public, max-age=15',
     'X-Overpass-Cache': cacheStatus,
     'X-Overpass-Upstream': payload.endpoint || 'unknown',
@@ -3431,9 +3455,14 @@ function gbfsProxy() {
             res.end(JSON.stringify({ error: 'GBFS upstream response too large' }));
             return;
           }
-          const contentType = upstream.headers.get('content-type') || 'application/json';
+          // Don't reflect the upstream Content-Type here either. The host and
+          // path are allowlisted to two GBFS `.json` documents, so JSON is the
+          // contract; taking the provider's word for the type would let a
+          // compromised or misconfigured one render HTML at this origin, which
+          // is the /api/overpass problem in a quieter place.
           res.writeHead(upstream.status, {
-            'Content-Type': contentType,
+            'Content-Type': 'application/json; charset=utf-8',
+            'X-Content-Type-Options': 'nosniff',
             'Cache-Control': gbfsCacheControl(upstreamUrl.pathname),
             'X-GBFS-Upstream': upstreamUrl.hostname,
             'X-GBFS-Cache': 'MISS',
@@ -7737,8 +7766,18 @@ export default defineConfig(({ mode }) => {
   }
   const env = { ...process.env };
   const localAllowedHosts = ['localhost', '127.0.0.1', '.local'];
+  // Computed once and handed to BOTH vite's own host check and the /api guard,
+  // so the document and the API can never disagree about which hosts are local.
+  // When binding to all interfaces, allow any host; otherwise restrict to local names.
+  const allowedHosts = (env.HOST === '0.0.0.0' || env.HOST === '::')
+    ? true
+    : localAllowedHosts;
   return {
     plugins: [
+      // FIRST, and `enforce: 'pre'`: vite installs its own host check only
+      // AFTER every configureServer hook has run, so each proxy below would
+      // otherwise answer before any Host validation. See src/apiHostGuard.mjs.
+      apiHostGuardPlugin({ allowedHosts }),
       cesium(),
       openSkyProxy(),
       celestrakProxy(),
@@ -7764,10 +7803,7 @@ export default defineConfig(({ mode }) => {
     server: {
       host: env.HOST || 'localhost',
       port: parseInt(env.PORT, 10) || 4173,
-      // When binding to all interfaces, allow any host; otherwise restrict to local names
-      allowedHosts: (env.HOST === '0.0.0.0' || env.HOST === '::')
-        ? true
-        : localAllowedHosts,
+      allowedHosts,
       fs: {
         // Pinokio keeps optional credentials in this ignored local file.
         deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/ENVIRONMENT'],
