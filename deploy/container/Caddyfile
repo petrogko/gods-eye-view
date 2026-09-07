@@ -49,20 +49,22 @@ Disallow: /
 " 200
 	}
 
-	# Known AI training / answer-engine crawlers. A moving target; the wildcard
-	# robots.txt above and basic auth below cover whatever is not listed here.
-	@ai_bots header_regexp User-Agent (?i)(GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-Web|anthropic-ai|CCBot|PerplexityBot|Perplexity-User|Bytespider|Amazonbot|Meta-ExternalAgent|FacebookBot|cohere-ai|Diffbot|omgili|YouBot|AI2Bot|DuckAssistBot|ImagesiftBot|PetalBot|Scrapy)
-	handle @ai_bots {
-		respond 403
-	}
-
 	# Unauthenticated liveness probe that exercises the app itself without
-	# exposing the app document: a static icon proves Node is up.
+	# exposing the app document: a static icon proves Node is up. Ordered ABOVE
+	# the crawler block: the platform's health probe must never be refusable by
+	# a User-Agent rule, whatever UA it happens to send.
 	handle /healthz {
 		rewrite * /pin.svg
 		reverse_proxy 127.0.0.1:{$PORT:4173} {
 			header_up Host localhost
 		}
+	}
+
+	# Known AI training / answer-engine crawlers. A moving target; the wildcard
+	# robots.txt above and basic auth below cover whatever is not listed here.
+	@ai_bots header_regexp User-Agent (?i)(GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-Web|anthropic-ai|CCBot|PerplexityBot|Perplexity-User|Bytespider|Amazonbot|Meta-ExternalAgent|FacebookBot|cohere-ai|Diffbot|omgili|YouBot|AI2Bot|DuckAssistBot|ImagesiftBot|PetalBot|Scrapy)
+	handle @ai_bots {
+		respond 403
 	}
 
 	handle {

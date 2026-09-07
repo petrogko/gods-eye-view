@@ -30,6 +30,14 @@ RUN npm run build \
 
 # ---------- runtime ----------
 FROM node:24-slim AS runtime
+# Pull Debian's security updates into the shipped layer: the base tag lags the
+# archive, and ECR's scan flags base packages (perl, util-linux, zlib) the app
+# never executes but that still count against the image. Build with --pull so
+# the base tag itself is current too.
+RUN apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/*
 COPY --from=caddy:2 /usr/bin/caddy /usr/bin/caddy
 WORKDIR /app
 COPY --from=build --chown=node:node /app /app
