@@ -9,10 +9,13 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# ecr_repository_url is written even by a targeted `apply -target=...app`; the
+# standalone `region` output is not, so derive region from the repo URL
+# (<account>.dkr.ecr.<region>.amazonaws.com/<repo>) rather than a second output.
 REPO="$(terraform output -raw ecr_repository_url)"
-REGION="$(terraform output -raw region)"
 TAG="${IMAGE_TAG:-latest}"
 REGISTRY="${REPO%%/*}"
+REGION="$(printf '%s' "$REGISTRY" | awk -F. '{print $4}')"
 
 echo "→ logging in to ${REGISTRY}"
 aws ecr get-login-password --region "${REGION}" \
