@@ -60,11 +60,15 @@ resource "aws_ecr_lifecycle_policy" "app" {
 # ---------- secrets ----------
 
 resource "aws_ssm_parameter" "secret" {
-  for_each = local.secrets
+  # for_each keys are env-var NAMES (BASIC_AUTH_HASH, OPENAI_API_KEY, ...), not
+  # secret — but the merged map's values are, and Terraform taints keys derived
+  # from a sensitive map. nonsensitive() asserts the names are safe to expose as
+  # instance keys; the value below stays sensitive.
+  for_each = toset(nonsensitive(keys(local.secrets)))
 
   name  = "/${local.name}/${each.key}"
   type  = "SecureString"
-  value = each.value
+  value = local.secrets[each.key]
   tier  = "Standard"
 }
 
