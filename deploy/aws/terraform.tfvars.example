@@ -4,6 +4,12 @@
 region   = "us-east-1"
 app_name = "gods-eye-view"
 
+# Guardrails. The budget alert is account-wide and only WARNS (AWS cannot hard-
+# stop spend). WAF adds ~USD 8-9/month; set enable_waf = false to skip it.
+alert_email        = "you@example.com"
+monthly_budget_usd = 20
+enable_waf         = true
+
 # Who may open the site. Hash with:
 #   docker run --rm caddy:2 caddy hash-password --plaintext 'your-password'
 basic_auth_user = "me"
@@ -20,6 +26,7 @@ provider_secrets = {
   # FIRMS_MAP_KEY                = "..."
   # TOMTOM_API_KEY               = "..."
   # LL2_API_TOKEN                = "..."
-  # GEV_RATELIMIT_OPENAI_PER_MIN = "30"
-  # GEV_RATELIMIT_GOOGLE_PER_MIN = "120"
 }
+# The app's per-IP throttles are plain variables, on by default:
+#   ratelimit_openai_per_min = "30"
+#   ratelimit_google_per_min = "120"

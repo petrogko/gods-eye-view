@@ -12,7 +12,17 @@ keys it holds. Never run it on a public URL without the auth layer in front.
 ## AWS App Runner (Terraform)
 
 One container, one HTTPS URL, no VPC/ALB/Cognito. About **$5–15/month** at
-one always-on instance (it holds the AIS socket, so it does not scale to zero).
+one always-on instance (it holds the AIS socket, so it does not scale to zero),
+plus **~$8–9/month for WAF** if `enable_waf` stays on.
+
+### Guardrails that ship with it
+
+| Guardrail | What it does | Knob |
+|---|---|---|
+| **Budget alert** | Emails you at 80% of the monthly ceiling spent and when the forecast crosses 100%. Account-wide. **Warns only** — AWS cannot hard-stop spend. | `alert_email`, `monthly_budget_usd` (default 20) |
+| **WAF** | Blocks any IP over 2,000 requests / 5 min, Amazon's IP-reputation list, and known-bad-inputs payloads. The Common Rule Set is deliberately left out: it would block legitimate Overpass QL bodies. | `enable_waf`, `waf_rate_limit_per_5min` |
+| **App throttles** | Per-IP caps on the OpenAI and Google endpoints, live from day one so they are already enforced when a key is added. | `ratelimit_openai_per_min` (30), `ratelimit_google_per_min` (120) |
+| **1/1 instance** | Cannot autoscale into a surprise bill. | `cpu`, `memory` |
 
 ### One-time
 
@@ -51,6 +61,27 @@ menu → **Add to Home screen** gives it an icon and a full-screen window.
 
 The in-app Provider Settings panel is off on a hosted instance by design (it
 answers loopback only), so keys are managed exclusively through Terraform.
+
+### Before you add the first provider key — do these, in this order
+
+The day a key lands, the basic-auth password becomes the only thing between
+an attacker and your money. The app throttles and WAF above are guards, not
+billing caps. Set the caps where the money actually is:
+
+1. **OpenAI** — platform.openai.com → Settings → Limits → set a monthly
+   budget and a hard limit. Use a project-scoped key, not your account key.
+2. **Google Cloud** — Billing → Budgets & alerts → create a budget; APIs &
+   Services → Credentials → the key → restrict by **HTTP referrer** to your
+   `service_url` hostname *and* by **API** to only the ones the app uses.
+   Set per-API quotas under APIs & Services → Quotas.
+3. **Cesium ion** — use a token scoped to `assets:read` with URL restrictions.
+4. **OpenSky / AISStream / FIRMS / TomTom / LL2** — free tiers; nothing to cap,
+   but rotate any key that ever appears in a log or chat.
+5. Then add the key under `provider_secrets` in `terraform.tfvars`, run
+   `terraform apply`, and confirm the service redeployed.
+
+**Rotate the site password** any time it may have been seen: generate a new
+hash with `caddy hash-password`, update `basic_auth_hash`, `terraform apply`.
 
 ### Operate
 

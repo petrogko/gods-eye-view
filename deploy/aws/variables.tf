@@ -51,3 +51,40 @@ variable "memory" {
   type        = string
   default     = "2048"
 }
+
+# ---------- guardrails ----------
+
+variable "alert_email" {
+  description = "Where AWS Budgets sends cost alerts (80% actual, 100% forecast of monthly_budget_usd)."
+  type        = string
+}
+
+variable "monthly_budget_usd" {
+  description = "Account-wide monthly cost ceiling that triggers the alert emails. Not a hard cap: AWS cannot stop spend, only warn."
+  type        = number
+  default     = 20
+}
+
+variable "enable_waf" {
+  description = "Attach an AWS WAF web ACL (rate limit + AWS IP reputation + known-bad-inputs) to the service. Adds roughly USD 8-9/month."
+  type        = bool
+  default     = true
+}
+
+variable "waf_rate_limit_per_5min" {
+  description = "Requests per source IP per 5 minutes before WAF blocks that IP. A heavy legitimate session is a few hundred."
+  type        = number
+  default     = 2000
+}
+
+variable "ratelimit_openai_per_min" {
+  description = "App-level per-IP cap on the OpenAI-backed endpoints. In force from day one so it is already on when a key is added. Empty string disables."
+  type        = string
+  default     = "30"
+}
+
+variable "ratelimit_google_per_min" {
+  description = "App-level per-IP cap on the Google Places endpoint. Same rationale as ratelimit_openai_per_min."
+  type        = string
+  default     = "120"
+}
