@@ -23,6 +23,12 @@ plus **~$8–9/month for WAF** if `enable_waf` stays on.
 | **WAF** | Blocks any IP over 2,000 requests / 5 min, Amazon's IP-reputation list, and known-bad-inputs payloads. The Common Rule Set is deliberately left out: it would block legitimate Overpass QL bodies. | `enable_waf`, `waf_rate_limit_per_5min` |
 | **App throttles** | Per-IP caps on the OpenAI and Google endpoints, live from day one so they are already enforced when a key is added. | `ratelimit_openai_per_min` (30), `ratelimit_google_per_min` (120) |
 | **1/1 instance** | Cannot autoscale into a surprise bill. | `cpu`, `memory` |
+| **Request-spike alarm** | Emails when the service sees more than N requests in 5 min — a scraper or flood. Counts 401s too. AWS sends a one-time SNS confirmation link; click it. | `request_spike_threshold` (3000), `alert_email` |
+| **Crawler refusal** | `robots.txt` says `Disallow: /` to everyone; every response carries `X-Robots-Tag: noindex, nofollow, noarchive, noai, noimageai`; known AI crawler user-agents get `403` before the auth prompt. None of this is the real barrier — basic auth is — it just tells honest bots not to try. | `deploy/container/Caddyfile` |
+| **Access log** | Caddy logs every request as JSON to stdout → CloudWatch, so failed logins and probing bots are visible. | — |
+
+`/healthz` is the only path reachable without a password, and it fetches a
+5 KB icon — never the app document.
 
 ### One-time
 

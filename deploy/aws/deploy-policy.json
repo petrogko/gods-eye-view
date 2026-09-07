@@ -144,6 +144,27 @@
       "Resource": "*"
     },
     {
+      "Sid": "SpikeAlarm",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:TagResource",
+        "cloudwatch:ListTagsForResource",
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:GetTopicAttributes",
+        "sns:SetTopicAttributes",
+        "sns:Subscribe",
+        "sns:Unsubscribe",
+        "sns:GetSubscriptionAttributes",
+        "sns:ListTagsForResource",
+        "sns:TagResource"
+      ],
+      "Resource": "*"
+    },
+    {
       "Sid": "ReadOnlyLookups",
       "Effect": "Allow",
       "Action": [

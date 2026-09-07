@@ -55,8 +55,15 @@ variable "memory" {
 # ---------- guardrails ----------
 
 variable "alert_email" {
-  description = "Where AWS Budgets sends cost alerts (80% actual, 100% forecast of monthly_budget_usd)."
+  description = "Where the budget alert and the request-spike alarm send email. Empty creates both WITHOUT a recipient — the `alerts_delivery` output says so loudly. AWS emails a one-time confirmation link for the alarm subscription; click it or those alerts never arrive."
   type        = string
+  default     = ""
+}
+
+variable "request_spike_threshold" {
+  description = "Requests per 5 minutes across the service that trigger the spike alarm — the signature of a scraper or flood. A heavy legitimate session is a few hundred."
+  type        = number
+  default     = 3000
 }
 
 variable "monthly_budget_usd" {

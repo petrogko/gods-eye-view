@@ -208,21 +208,69 @@ resource "aws_budgets_budget" "monthly" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
-  notification {
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = 80
-    threshold_type             = "PERCENTAGE"
-    notification_type          = "ACTUAL"
-    subscriber_email_addresses = [var.alert_email]
+  # Both notifications need a recipient; with no alert_email the budget still
+  # exists (visible in the console) but nobody is told. The alerts_delivery
+  # output makes that state impossible to miss.
+  dynamic "notification" {
+    for_each = var.alert_email != "" ? [80] : []
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = notification.value
+      threshold_type             = "PERCENTAGE"
+      notification_type          = "ACTUAL"
+      subscriber_email_addresses = [var.alert_email]
+    }
   }
 
-  notification {
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = 100
-    threshold_type             = "PERCENTAGE"
-    notification_type          = "FORECASTED"
-    subscriber_email_addresses = [var.alert_email]
+  dynamic "notification" {
+    for_each = var.alert_email != "" ? [100] : []
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = notification.value
+      threshold_type             = "PERCENTAGE"
+      notification_type          = "FORECASTED"
+      subscriber_email_addresses = [var.alert_email]
+    }
   }
+}
+
+# ---------- guardrail: request-spike alarm ----------
+
+# Cheap stand-in for the WAF rate rule when enable_waf is off: emails when the
+# service sees more than request_spike_threshold requests in 5 minutes — the
+# signature of a scraper or a flood. Sum of App Runner's own Requests metric,
+# so it counts everything Caddy answered, 401s included.
+resource "aws_sns_topic" "alerts" {
+  name = "${local.name}-alerts"
+}
+
+resource "aws_sns_topic_subscription" "alerts_email" {
+  count = var.alert_email != "" ? 1 : 0
+
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = var.alert_email
+}
+
+resource "aws_cloudwatch_metric_alarm" "request_spike" {
+  alarm_name          = "${local.name}-request-spike"
+  alarm_description   = "More than ${var.request_spike_threshold} requests to ${local.name} in 5 minutes."
+  namespace           = "AWS/AppRunner"
+  metric_name         = "Requests"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = var.request_spike_threshold
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    ServiceName = aws_apprunner_service.app.service_name
+    ServiceID   = aws_apprunner_service.app.service_id
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
 }
 
 # ---------- guardrail: WAF ----------
