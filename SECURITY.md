@@ -48,6 +48,22 @@ The data proxies in `vite.config.js` are written so the browser cannot turn the 
 
 - **No arbitrary-URL fetching.** The CCTV frame proxy fetches only server-registered camera/frame URLs — clients cannot pass an upstream URL to fetch (SSRF mitigation). Other proxies target fixed upstream hosts.
 - **Radio is not an audio relay.** `/api/radio/stations` contacts only allowlisted Radio Browser HTTPS hosts and paths, rejects redirects, rejects any hostname with a loopback/private/link-local/metadata/non-public A or AAAA result, and pins each TLS connection to a validated address. It returns normalized public HTTPS stream URLs; `/api/radio/click/:uuid` applies the same destination policy and accepts only station IDs from the current bounded catalog. The browser then connects directly to the broadcaster after an explicit playback action, so the broadcaster sees the listener's IP address. GEV never proxies, caches, records, or redistributes audio.
+- **The `/api` surface enforces its own `Host` check.** Vite installs its
+  `allowedHosts` guard *after* every `configureServer` hook has run, so
+  middleware registered inside those hooks — which is every proxy here — would
+  otherwise answer before the `Host` header was ever validated, leaving the key
+  broker open to DNS rebinding. `src/apiHostGuard.mjs` re-applies Vite's exact
+  policy ahead of all of them, on the dev and preview servers alike. It is
+  registered first and `enforce: 'pre'`; a proxy added above it, or a Vite
+  upgrade that reorders the hooks, is caught by `src/apiHostGuard.test.mjs`.
+- **No proxy reflects an upstream `Content-Type`.** These routes accept a plain
+  cross-origin form POST — a simple request, so no preflight and no `Origin`
+  check applies — which means a reflected `text/html` would render an
+  upstream-chosen document, script included, at this app's own origin. Overpass
+  and GBFS responses are labelled by contract (`application/json`, or
+  `text/plain` for a refusal body kept for diagnosis) and sent with
+  `X-Content-Type-Options: nosniff`. `/api/overpass` additionally accepts only
+  `[out:json]`, so a mirror cannot be asked for an HTML output mode at all.
 - **Response-size caps and timeouts** on proxied responses.
 - **Sanitized errors** — internal error details are not echoed back to clients.
 - **Coalesced OAuth refresh** and cached successful responses only (OpenSky).

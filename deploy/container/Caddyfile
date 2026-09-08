@@ -1,0 +1,84 @@
+# Caddy fronts the Node preview server inside the container.
+#
+# - Basic auth on everything except /healthz and /robots.txt. The platform
+#   (App Runner) needs an unauthenticated probe; it reaches the real app through
+#   the proxy so a dead Node process fails the check instead of hiding behind a
+#   healthy Caddy — but it fetches a 5 KB icon, not the app document, so the
+#   probe path leaks nothing.
+# - Known AI crawlers get a 403 before they ever see the auth prompt. This
+#   stops HONEST bots; one that lies about its User-Agent still hits the
+#   password wall, which is the layer that actually holds.
+# - TLS is terminated by the platform; this listener is plain HTTP on the
+#   container port. No site name, so Caddy never attempts certificate issuance.
+# - Credentials arrive as env vars: BASIC_AUTH_USER and BASIC_AUTH_HASH (a
+#   bcrypt hash — generate with `caddy hash-password`). Both are injected as
+#   runtime secrets, never baked into the image.
+{
+	admin off
+	auto_https off
+}
+
+:{$PUBLIC_PORT:8080} {
+	# Access log to stdout → App Runner → CloudWatch. This is how you see
+	# failed logins and which bots are probing.
+	log {
+		output stdout
+		format json
+	}
+
+	encode gzip zstd
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Content-Security-Policy "frame-ancestors 'none'"
+		Referrer-Policy strict-origin-when-cross-origin
+		# Machine-readable "do not index, do not train on this" for every response.
+		X-Robots-Tag "noindex, nofollow, noarchive, noai, noimageai"
+		# The outer connection is always HTTPS (platform-terminated); pin it.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# Readable by everyone so compliant crawlers see the answer before trying.
+	# The site is private, so the strongest robots.txt is also the simplest.
+	handle /robots.txt {
+		header Content-Type text/plain
+		respond "User-agent: *
+Disallow: /
+" 200
+	}
+
+	# Unauthenticated liveness probe that exercises the app itself without
+	# exposing the app document: a static icon proves Node is up. Ordered ABOVE
+	# the crawler block: the platform's health probe must never be refusable by
+	# a User-Agent rule, whatever UA it happens to send.
+	handle /healthz {
+		rewrite * /pin.svg
+		reverse_proxy 127.0.0.1:{$PORT:4173} {
+			header_up Host localhost
+		}
+	}
+
+	# Known AI training / answer-engine crawlers. A moving target; the wildcard
+	# robots.txt above and basic auth below cover whatever is not listed here.
+	@ai_bots header_regexp User-Agent (?i)(GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-Web|anthropic-ai|CCBot|PerplexityBot|Perplexity-User|Bytespider|Amazonbot|Meta-ExternalAgent|FacebookBot|cohere-ai|Diffbot|omgili|YouBot|AI2Bot|DuckAssistBot|ImagesiftBot|PetalBot|Scrapy)
+	handle @ai_bots {
+		respond 403
+	}
+
+	handle {
+		basic_auth {
+			{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+		}
+		reverse_proxy 127.0.0.1:{$PORT:4173} {
+			# Node sees `localhost`, never the public hostname: vite's restricted
+			# allowedHosts and the /api host guard stay enforced in the container.
+			header_up Host localhost
+			# Long-lived: the voice session and AIS polling hold connections open.
+			transport http {
+				read_timeout 120s
+			}
+		}
+	}
+}

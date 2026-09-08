@@ -1,0 +1,22 @@
+# Never ship a credential, a cache, or a local artifact into the image.
+.env
+.env.*
+!.env.example
+pinokio/ENVIRONMENT
+pinokio/.installed
+.gev-cache/
+.gev-logs/
+node_modules/
+dist/
+.git/
+.github/
+qa-shots/
+screenshots/
+output/
+3d-models/
+.gstack/
+.DS_Store
+*.log
+deploy/aws/.terraform/
+deploy/aws/*.tfstate*
+deploy/aws/*.tfvars

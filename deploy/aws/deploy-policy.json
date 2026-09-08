@@ -1,0 +1,177 @@
+{
+  "Version": "2012-10-17",
+  "Comment": "Least-privilege policy for the identity that DEPLOYS God's Eye View (runs terraform + build-and-push.sh). Replace ACCOUNT_ID and, if you changed app_name, gods-eye-view. This is the operator's permission set; the two roles the app itself uses are created by Terraform, not by you.",
+  "Statement": [
+    {
+      "Sid": "EcrRepoLifecycle",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:CreateRepository",
+        "ecr:DeleteRepository",
+        "ecr:DescribeRepositories",
+        "ecr:ListTagsForResource",
+        "ecr:TagResource",
+        "ecr:PutLifecyclePolicy",
+        "ecr:GetLifecyclePolicy",
+        "ecr:DeleteLifecyclePolicy",
+        "ecr:PutImageScanningConfiguration"
+      ],
+      "Resource": "arn:aws:ecr:*:ACCOUNT_ID:repository/gods-eye-view"
+    },
+    {
+      "Sid": "EcrPushPull",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload",
+        "ecr:PutImage",
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer"
+      ],
+      "Resource": "arn:aws:ecr:*:ACCOUNT_ID:repository/gods-eye-view"
+    },
+    {
+      "Sid": "EcrLogin",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "AppRunner",
+      "Effect": "Allow",
+      "Action": [
+        "apprunner:CreateService",
+        "apprunner:UpdateService",
+        "apprunner:DeleteService",
+        "apprunner:DescribeService",
+        "apprunner:ListServices",
+        "apprunner:ListOperations",
+        "apprunner:TagResource",
+        "apprunner:ListTagsForResource",
+        "apprunner:CreateAutoScalingConfiguration",
+        "apprunner:DeleteAutoScalingConfiguration",
+        "apprunner:DescribeAutoScalingConfiguration",
+        "apprunner:ListAutoScalingConfigurations"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SsmSecrets",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:PutParameter",
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:DeleteParameter",
+        "ssm:AddTagsToResource",
+        "ssm:ListTagsForResource"
+      ],
+      "Resource": "arn:aws:ssm:*:ACCOUNT_ID:parameter/gods-eye-view/*"
+    },
+    {
+      "Sid": "IamManageServiceRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:TagRole",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListInstanceProfilesForRole"
+      ],
+      "Resource": [
+        "arn:aws:iam::ACCOUNT_ID:role/gods-eye-view-apprunner-access",
+        "arn:aws:iam::ACCOUNT_ID:role/gods-eye-view-apprunner-instance"
+      ]
+    },
+    {
+      "Sid": "IamPassRolesToAppRunnerOnly",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": [
+        "arn:aws:iam::ACCOUNT_ID:role/gods-eye-view-apprunner-access",
+        "arn:aws:iam::ACCOUNT_ID:role/gods-eye-view-apprunner-instance"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": [
+            "build.apprunner.amazonaws.com",
+            "tasks.apprunner.amazonaws.com"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "BudgetAlert",
+      "Effect": "Allow",
+      "Action": [
+        "budgets:ViewBudget",
+        "budgets:ModifyBudget"
+      ],
+      "Resource": "arn:aws:budgets::ACCOUNT_ID:budget/gods-eye-view-monthly"
+    },
+    {
+      "Sid": "WafWebAcl",
+      "Effect": "Allow",
+      "Action": [
+        "wafv2:CreateWebACL",
+        "wafv2:UpdateWebACL",
+        "wafv2:DeleteWebACL",
+        "wafv2:GetWebACL",
+        "wafv2:ListWebACLs",
+        "wafv2:TagResource",
+        "wafv2:UntagResource",
+        "wafv2:ListTagsForResource",
+        "wafv2:AssociateWebACL",
+        "wafv2:DisassociateWebACL",
+        "wafv2:GetWebACLForResource",
+        "wafv2:ListResourcesForWebACL",
+        "wafv2:CheckCapacity",
+        "wafv2:DescribeManagedRuleGroup",
+        "apprunner:AssociateWebAcl",
+        "apprunner:DisassociateWebAcl",
+        "apprunner:DescribeWebAclForService",
+        "apprunner:ListAssociatedServicesForWebAcl"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SpikeAlarm",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:TagResource",
+        "cloudwatch:ListTagsForResource",
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:GetTopicAttributes",
+        "sns:SetTopicAttributes",
+        "sns:Subscribe",
+        "sns:Unsubscribe",
+        "sns:GetSubscriptionAttributes",
+        "sns:ListTagsForResource",
+        "sns:TagResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadOnlyLookups",
+      "Effect": "Allow",
+      "Action": [
+        "sts:GetCallerIdentity",
+        "kms:ListAliases"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

@@ -223,3 +223,70 @@ test('coalesced outage callers both receive last-good data, never a cached refus
     }
   }
 });
+
+// OUTPUT FORMAT AND CONTENT TYPE — what this origin is allowed to render.
+//
+// /api/overpass takes an unauthenticated cross-origin form POST: a simple
+// request, so there is no preflight and no Origin check can apply. If the
+// response carries an upstream-chosen `text/html`, a form auto-submitted from
+// any page the victim visits renders a mirror-chosen document — inline script
+// and third-party <script src> included — at THIS origin, the one holding the
+// key broker. Two independent layers stop that: the sanitizer admits only
+// `[out:json]`, and the response never echoes the upstream's type.
+
+test('a non-json output mode is refused before any mirror is contacted', async (t) => {
+  const handler = proxyHandler();
+  const mock = t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('no mirror may be contacted for a rejected query');
+  });
+  try {
+    // `[out:custom]` and `[out:popup]` return a full HTML page; `[out:csv]`
+    // returns text/plain. Only `[out:json]` is ever issued by this app.
+    for (const mode of ['custom', 'popup', 'csv(name)', 'xml']) {
+      const query = `[out:${mode}][timeout:25];node(around:40,52.5163,13.3777)["name"];out body;`;
+      const response = await invoke(handler, `data=${encodeURIComponent(query)}`);
+      assert.equal(response.status, 400, `[out:${mode}] must be refused`);
+      assert.match(response.headers['Content-Type'], /application\/json/);
+    }
+    // A query naming no output format defaults to XML upstream — also refused.
+    const bare = 'node(around:40,52.5163,13.3777)["name"];out body;';
+    assert.equal((await invoke(handler, `data=${encodeURIComponent(bare)}`)).status, 400);
+    assert.equal(mock.mock.callCount(), 0);
+  } finally {
+    mock.mock.restore();
+  }
+});
+
+test('an upstream Content-Type never reaches the browser', async (t) => {
+  for (const [status, expected] of [[200, 'application/json'], [406, 'text/plain']]) {
+    const handler = proxyHandler();
+    const query = `[out:json][timeout:12];node(around:10,30.27,-97.74)["name"="${randomUUID()}"];out;`;
+    const body = `data=${encodeURIComponent(query)}`;
+    const file = path.join(
+      process.cwd(), '.gev-cache', 'overpass',
+      `${createHash('sha1').update(body).digest('hex')}.json`,
+    );
+    // Every mirror answers with an HTML document, exactly as a real mirror does
+    // for `[out:custom]` and for an Apache-generated 406.
+    const mock = t.mock.method(globalThis, 'fetch', async () => new Response(
+      '<html><body><script>fetch("/api/realtime/token")</script></body></html>',
+      { status, headers: { 'content-type': 'text/html; charset=utf-8' } },
+    ));
+    try {
+      const response = await invoke(handler, body);
+      assert.match(response.headers['Content-Type'], new RegExp(expected));
+      assert.doesNotMatch(response.headers['Content-Type'], /text\/html/);
+      assert.equal(response.headers['X-Content-Type-Options'], 'nosniff');
+      // The upstream text is still delivered for diagnosis — just inert.
+      assert.match(response.body, /<html>/);
+    } finally {
+      mock.mock.restore();
+      // The disk write is fire-and-forget after the response is sent, so a
+      // single unlink races it and leaves the entry behind. Retry briefly.
+      for (let attempt = 0; attempt < 50; attempt++) {
+        try { await unlink(file); break; } catch { /* not written yet */ }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+    }
+  }
+});

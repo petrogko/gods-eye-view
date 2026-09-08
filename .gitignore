@@ -1,6 +1,12 @@
 node_modules
 dist
+# Credentials. `.env` alone is not enough: loadEnv(mode, __dirname, '') also
+# reads .env.local, .env.[mode] and .env.[mode].local — and .env.local takes
+# PRECEDENCE over .env — so a key placed there by Vite convention works fine
+# while sitting untracked and stageable. Keep .env.example, the only one tracked.
 .env
+.env.*
+!.env.example
 *.log
 screenshots/
 qa-shots/
@@ -12,3 +18,15 @@ output/
 3d-models/
 pinokio/ENVIRONMENT
 pinokio/.installed
+# Atomic-write staging files from Provider Settings (persistStore in
+# vite.config.js writes `.<basename>.<8hex>.tmp` beside the target, then
+# renames). A crash between open and rename strands one holding every key.
+..env.*.tmp
+pinokio/.ENVIRONMENT.*.tmp
+# Deployment state and the tfvars that carry real secrets.
+deploy/aws/.terraform/
+deploy/aws/.terraform.lock.hcl
+deploy/aws/*.tfstate
+deploy/aws/*.tfstate.*
+deploy/aws/terraform.tfvars
+deploy/aws/*.auto.tfvars
